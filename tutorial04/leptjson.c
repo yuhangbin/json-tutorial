@@ -91,19 +91,56 @@ static int lept_parse_number(lept_context* c, lept_value* v) {
 }
 
 static const char* lept_parse_hex4(const char* p, unsigned* u) {
-    /* \TODO */
+    /* \TODO
+     * 1. 0 ~ 9 || a ~ f || A ~ F
+     * */
+	int i;
+	for(i = 0; i < 4; i++) {
+		*u = *u << 4;
+		p++;
+		if (*p >= '0' && *p <= '9') {
+			u = u | (*p - 48);
+		} else if (*p >= 'a' && *p <= 'f') {
+			u = u | (*p - 97 + 10);
+		} else if (*p >= 'A' && *p <= 'F') {
+			u = u | (*p - 65 + 10);
+		} else {
+			return NULL;
+		}
+
+	}
+
     return p;
 }
 
 static void lept_encode_utf8(lept_context* c, unsigned u) {
-    /* \TODO */
+    /* \TODO
+     * U+0000 ~ U+007F    0xxxxxxx
+     * U+0080 ~ U+07FF    110xxxxx 10xxxxxx
+     * U+0800 ~ U+FFFF    1110xxxx 10xxxxxx 10xxxxxx
+     * U+10000 ~ U+10FFFF 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+     * 0xC000 1100 0000
+     * 0x8000 1000 0000
+     * 0xE000 1110 0000
+     * 0xF000 1111 0000
+     * */
+	if (u >= 0x0000 && u <= 0x007f) {
+		PUTC(c, u & 0xFF);
+	} else if (u >= 0x0080 && u <= 0x07FF) {
+		PUTC(c, (0xC0 | ((u >> 6) & 0x1F)); /* first: 5 digital | 0x1F: 0001 1111 */
+		PUTC(c, (0x80 | (u & 0x3F)); /* second: 6 digital | 0x3F: 0011 1111 */
+	} else if (u >= 0x0800 && u <= 0xFFFF) {
+		PUTC(c, (0xE000 | ()))
+	} else if (u >= 0x10000 && u <= 0x10FFFF) {
+
+	}
 }
 
 #define STRING_ERROR(ret) do { c->top = head; return ret; } while(0)
 
 static int lept_parse_string(lept_context* c, lept_value* v) {
     size_t head = c->top, len;
-    unsigned u;
+    unsigned u, u2;
     const char* p;
     EXPECT(c, '\"');
     p = c->json;
@@ -128,7 +165,25 @@ static int lept_parse_string(lept_context* c, lept_value* v) {
                     case 'u':
                         if (!(p = lept_parse_hex4(p, &u)))
                             STRING_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX);
-                        /* \TODO surrogate handling */
+                        /* \TODO surrogate handling
+                         * high surrogate range: 0xD800 ~ 0xDBFF
+                         * low surrogate range: 0xDC00 ~ 0xDFFF
+                         * */
+						if (u >= 0xD800 && u <= 0xDBFF) {
+							if (*p++ != '\\') {
+								STRING_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE);
+							}
+							if (*p++ != 'u') {
+								STRING_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE);
+							}
+							if (!(p = lept_parse_hex4(p, &u2))) {
+								STRING_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE);
+							}
+							if (u2 < 0xDC00 || u2 > 0xDFFF) {
+								STRING_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE);
+							}
+							u = 0x10000 + ((u - 0xD800) << 10) + (u2 - 0xDC00)
+						}
                         lept_encode_utf8(c, u);
                         break;
                     default:
