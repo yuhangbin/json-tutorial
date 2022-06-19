@@ -95,19 +95,19 @@ static const char* lept_parse_hex4(const char* p, unsigned* u) {
      * 1. 0 ~ 9 || a ~ f || A ~ F
      * */
 	int i;
+	*u = 0;
 	for(i = 0; i < 4; i++) {
 		*u = *u << 4;
-		p++;
-		if (*p >= '0' && *p <= '9') {
-			u = u | (*p - 48);
-		} else if (*p >= 'a' && *p <= 'f') {
-			u = u | (*p - 97 + 10);
-		} else if (*p >= 'A' && *p <= 'F') {
-			u = u | (*p - 65 + 10);
+		char ch = *p++;
+		if (ch >= '0' && ch <= '9') {
+			*u = *u | (ch - 48);
+		} else if (ch >= 'a' && ch <= 'f') {
+			*u = *u | (ch - 97 + 10);
+		} else if (ch >= 'A' && ch <= 'F') {
+			*u = *u | (ch - 65 + 10);
 		} else {
 			return NULL;
 		}
-
 	}
 
     return p;
@@ -127,12 +127,18 @@ static void lept_encode_utf8(lept_context* c, unsigned u) {
 	if (u >= 0x0000 && u <= 0x007f) {
 		PUTC(c, u & 0xFF);
 	} else if (u >= 0x0080 && u <= 0x07FF) {
-		PUTC(c, (0xC0 | ((u >> 6) & 0x1F)); /* first: 5 digital | 0x1F: 0001 1111 */
-		PUTC(c, (0x80 | (u & 0x3F)); /* second: 6 digital | 0x3F: 0011 1111 */
+		PUTC(c, (0xC0 | ((u >> 6) & 0x1F)));
+		PUTC(c, (0x80 | (u & 0x3F)));
 	} else if (u >= 0x0800 && u <= 0xFFFF) {
-		PUTC(c, (0xE000 | ()))
+		PUTC(c, ( 0xE0 | ((u >>12) & 0x0F)));
+		PUTC(c, ( 0x80 | ((u >> 6) & 0x3F)));
+		PUTC(c, ( 0x80 | (u & 0x3F)));
 	} else if (u >= 0x10000 && u <= 0x10FFFF) {
-
+		assert(u <= 0x10FFFF);
+		PUTC(c, (0xF0 | ((u >> 18) & 0x07)));
+		PUTC(c, (0x80 | ((u >> 12) & 0x3F)));
+		PUTC(c, (0x80 | ((u >> 6) & 0x3F)));
+		PUTC(c, (0x80 | (u & 0x3F)));
 	}
 }
 
@@ -182,7 +188,7 @@ static int lept_parse_string(lept_context* c, lept_value* v) {
 							if (u2 < 0xDC00 || u2 > 0xDFFF) {
 								STRING_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE);
 							}
-							u = 0x10000 + ((u - 0xD800) << 10) + (u2 - 0xDC00)
+							u = 0x10000 + ((u - 0xD800) << 10) + (u2 - 0xDC00);
 						}
                         lept_encode_utf8(c, u);
                         break;
